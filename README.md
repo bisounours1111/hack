@@ -1,6 +1,10 @@
-# Hackathon GitOps — Audit & Remédiation OVHcloud
+# Hackathon GitOps — Audit & Remédiation OVHcloud (Équipe 5)
 
-Chaîne GitOps sécurisée : détection (Trivy/Kyverno/Falco) → analyse IA (OVH AI Endpoints) → PR GitHub → merge → resync Argo CD.
+Chaîne d'audit et de remédiation GitOps sur Managed Kubernetes OVHcloud :
+
+> Détection d'une faille (Trivy) → analyse & correctif par l'IA (AI Endpoints OVHcloud) → Pull Request automatique → revue humaine → merge → resynchronisation Argo CD → cluster corrigé
+
+Rapport d'architecture + tableau CNCF : [`docs/architecture.md`](docs/architecture.md) · Scénario de démo : [`docs/demo.md`](docs/demo.md) · Couche IA : [`apps/remediator/README.md`](apps/remediator/README.md)
 
 ## Prérequis
 
@@ -63,18 +67,31 @@ python apps/remediator/remediator.py --dry-run
 ## Vérifications
 
 ```bash
-kubectl get vulnerabilityreports -n demo
-kubectl get policyreport -A
 kubectl get applications -n argocd
+kubectl get vulnerabilityreports -n demo
+kubectl get configauditreports -n demo
+kubectl get policyreports -n demo
+kubectl logs -n falco -l app.kubernetes.io/name=falco | grep -i warning
 kubectl create job --from=cronjob/remediator manual-run -n demo
+```
+
+## Interfaces (chacune dans son terminal)
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80      # admin / hackathon2026
+kubectl port-forward svc/falco-falcosidekick-ui -n falco 2802:2802     # admin / admin
 ```
 
 ## Structure
 
 ```
-├── root-app.yaml
-├── infra/argocd-apps/     # Applications Argo CD
-├── policies/              # Kyverno (mode Audit)
-├── apps/vulnerable-app/   # Cible volontairement vulnérable
-└── apps/remediator/       # Script IA + CronJob
+├── root-app.yaml          # App of Apps (seul kubectl apply manuel après Argo CD)
+├── infra/argocd-apps/     # Applications Argo CD (Trivy, Kyverno, Prometheus, Falco, apps)
+├── policies/              # ClusterPolicies Kyverno (mode Audit)
+├── apps/vulnerable-app/   # Cible volontairement vulnérable (4 familles de failles)
+├── apps/remediator/       # Couche IA : script + CronJob + RBAC (voir son README)
+└── docs/                  # Rapport d'architecture, tableau CNCF, scénario de démo
 ```
+
+Règle d'or : après le bootstrap d'Argo CD et de la root-app, plus rien ne s'installe à la main — tout passe par Git.
