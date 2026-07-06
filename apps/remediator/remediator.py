@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import yaml
-from github import Github, GithubException
+from github import Auth, Github, GithubException
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from openai import OpenAI
@@ -32,6 +32,10 @@ MANIFEST_PATH = os.environ.get("MANIFEST_PATH", "apps/vulnerable-app/deployment.
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "bisounours1111/hack")
 GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 ACTIONABLE_SEVERITIES = {"CRITICAL", "HIGH"}
+
+
+def github_client(token: str) -> Github:
+    return Github(auth=Auth.Token(token))
 
 SYSTEM_PROMPT = """Tu es un expert Kubernetes et DevSecOps.
 Tu dois corriger un manifest Deployment vulnérable.
@@ -130,7 +134,7 @@ def extract_config_findings(reports: list[dict[str, Any]]) -> list[dict[str, str
 
 
 def fetch_manifest_from_github(token: str, repo_name: str, path: str, branch: str) -> tuple[str, str | None]:
-    gh = Github(token)
+    gh = github_client(token)
     repo = gh.get_repo(repo_name)
     try:
         content_file = repo.get_contents(path, ref=branch)
@@ -209,7 +213,7 @@ def validate_manifest(yaml_content: str) -> str:
 
 
 def has_open_remediation_pr(token: str, repo_name: str) -> bool:
-    gh = Github(token)
+    gh = github_client(token)
     repo = gh.get_repo(repo_name)
     pulls = repo.get_pulls(state="open", base=GITHUB_BRANCH)
     for pull in pulls:
@@ -237,7 +241,7 @@ def create_remediation_pr(
         logger.info("Corrected YAML:\n%s", new_content)
         return
 
-    gh = Github(token)
+    gh = github_client(token)
     repo = gh.get_repo(repo_name)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     fix_branch = f"fix/auto-remediation-{timestamp}"
