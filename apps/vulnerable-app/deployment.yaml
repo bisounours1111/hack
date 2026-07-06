@@ -17,9 +17,14 @@ spec:
     spec:
       containers:
         - name: nginx
+          # FAILLE 1 : image très ancienne, bourrée de CVE connues
           image: nginx:1.14
           ports:
             - containerPort: 80
           securityContext:
+            # FAILLE 2 : conteneur privilégié = accès quasi-root au node
             privileged: true
+            # FAILLE 3 : tourne en root
+            runAsUser: 0
+          # FAILLE 4 : aucune limite CPU/mémoire
           resources: {}

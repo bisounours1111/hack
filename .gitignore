@@ -3,5 +3,9 @@
 __pycache__/
 .venv/
 venv/
+# kubeconfig = accès admin au cluster, ne jamais committer
 equipe-5.yaml
+kubeconfig*.yml
 .DS_Store
+# documents du hackathon (non versionnés)
+*.pdf

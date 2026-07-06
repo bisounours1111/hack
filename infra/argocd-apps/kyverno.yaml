@@ -13,6 +13,8 @@ spec:
     targetRevision: 3.3.4
     helm:
       values: |
+        crds:
+          install: true
         admissionController:
           replicas: 1
         backgroundController:
@@ -30,3 +32,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true

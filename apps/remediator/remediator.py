@@ -25,7 +25,8 @@ logger = logging.getLogger("remediator")
 
 TRIVY_GROUP = "aquasecurity.github.io"
 TRIVY_VERSION = "v1alpha1"
-TRIVY_PLURAL = "vulnerabilityreports"
+TRIVY_VULN_PLURAL = "vulnerabilityreports"
+TRIVY_CONFIG_PLURAL = "configauditreports"
 TARGET_NAMESPACE = os.environ.get("TARGET_NAMESPACE", "demo")
 MANIFEST_PATH = os.environ.get("MANIFEST_PATH", "apps/vulnerable-app/deployment.yaml")
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "bisounours1111/hack")
@@ -64,18 +65,17 @@ def load_kube_config() -> None:
         logger.info("Using local kubeconfig")
 
 
-def list_vulnerability_reports(namespace: str) -> list[dict[str, Any]]:
-    load_kube_config()
+def list_trivy_reports(namespace: str, plural: str) -> list[dict[str, Any]]:
     api = client.CustomObjectsApi()
     try:
         result = api.list_namespaced_custom_object(
             group=TRIVY_GROUP,
             version=TRIVY_VERSION,
             namespace=namespace,
-            plural=TRIVY_PLURAL,
+            plural=plural,
         )
     except ApiException as exc:
-        logger.error("Failed to list VulnerabilityReports: %s", exc)
+        logger.error("Failed to list %s: %s", plural, exc)
         raise
     return result.get("items", [])
 
@@ -109,6 +109,26 @@ def extract_actionable_findings(reports: list[dict[str, Any]]) -> list[dict[str,
     return findings
 
 
+def extract_config_findings(reports: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Extrait les échecs de configuration (privileged, root, limits...) des ConfigAuditReports."""
+    findings: list[dict[str, str]] = []
+    for report in reports:
+        report_name = report.get("metadata", {}).get("name", "unknown")
+        checks = report.get("report", {}).get("checks", []) or []
+        for check in checks:
+            if check.get("success", True):
+                continue
+            findings.append(
+                {
+                    "report": report_name,
+                    "check_id": check.get("checkID", "unknown"),
+                    "severity": (check.get("severity") or "UNKNOWN").upper(),
+                    "title": check.get("title", ""),
+                }
+            )
+    return findings
+
+
 def fetch_manifest_from_github(token: str, repo_name: str, path: str, branch: str) -> tuple[str, str | None]:
     gh = Github(token)
     repo = gh.get_repo(repo_name)
@@ -124,11 +144,22 @@ def fetch_manifest_from_github(token: str, repo_name: str, path: str, branch: st
         raise
 
 
-def build_user_prompt(findings: list[dict[str, str]], manifest_yaml: str) -> str:
+def build_user_prompt(
+    findings: list[dict[str, str]],
+    config_findings: list[dict[str, str]],
+    manifest_yaml: str,
+) -> str:
     findings_text = yaml.safe_dump(findings, allow_unicode=True, sort_keys=False)
+    config_text = (
+        yaml.safe_dump(config_findings, allow_unicode=True, sort_keys=False)
+        if config_findings
+        else "aucun\n"
+    )
     return (
-        "Voici les failles détectées par Trivy (CRITICAL/HIGH) :\n"
+        "Voici les CVE détectées par Trivy (CRITICAL/HIGH) :\n"
         f"{findings_text}\n"
+        "Voici les problèmes de configuration détectés (ConfigAuditReports) :\n"
+        f"{config_text}\n"
         "Voici le manifest Deployment actuel :\n"
         f"{manifest_yaml}\n"
         "Produis le manifest corrigé selon le format demandé."
@@ -260,15 +291,26 @@ def run(dry_run: bool = False) -> int:
         logger.error("Missing required environment variables: %s", ", ".join(missing))
         return 1
 
-    logger.info("Scanning VulnerabilityReports in namespace %s", TARGET_NAMESPACE)
-    reports = list_vulnerability_reports(TARGET_NAMESPACE)
+    logger.info("Scanning Trivy reports in namespace %s", TARGET_NAMESPACE)
+    load_kube_config()
+    reports = list_trivy_reports(TARGET_NAMESPACE, TRIVY_VULN_PLURAL)
     findings = extract_actionable_findings(reports)
 
-    if not findings:
-        logger.info("No CRITICAL/HIGH vulnerabilities found. Nothing to remediate.")
+    try:
+        config_reports = list_trivy_reports(TARGET_NAMESPACE, TRIVY_CONFIG_PLURAL)
+        config_findings = extract_config_findings(config_reports)
+    except ApiException:
+        config_findings = []
+
+    if not findings and not config_findings:
+        logger.info("No CRITICAL/HIGH vulnerabilities or config issues found. Nothing to remediate.")
         return 0
 
-    logger.info("Found %d actionable vulnerabilities", len(findings))
+    logger.info(
+        "Found %d actionable CVE and %d config issues",
+        len(findings),
+        len(config_findings),
+    )
     for item in findings:
         logger.info(
             "  %s [%s] %s (fix: %s)",
@@ -277,6 +319,8 @@ def run(dry_run: bool = False) -> int:
             item["resource"],
             item["fixed_version"],
         )
+    for item in config_findings:
+        logger.info("  %s [%s] %s", item["check_id"], item["severity"], item["title"])
 
     github_token = os.environ.get("GITHUB_TOKEN", "")
     if not dry_run and has_open_remediation_pr(github_token, GITHUB_REPO):
@@ -306,7 +350,7 @@ spec:
             privileged: true
 """
 
-    user_prompt = build_user_prompt(findings, manifest_yaml)
+    user_prompt = build_user_prompt(findings, config_findings, manifest_yaml)
     logger.info("Calling OVH AI Endpoints model %s", os.environ.get("OVH_AI_MODEL", "unknown"))
     ai_response = call_ai(SYSTEM_PROMPT, user_prompt)
     explanation, corrected_yaml = parse_ai_response(ai_response)
