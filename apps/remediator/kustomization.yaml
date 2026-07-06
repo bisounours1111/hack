@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - rbac.yaml
   - cronjob.yaml
-  - secret.yaml
 configMapGenerator:
   - name: remediator-code
     files:
