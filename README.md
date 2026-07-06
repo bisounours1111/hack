@@ -5,7 +5,7 @@ Chaîne GitOps sécurisée : détection (Trivy/Kyverno/Falco) → analyse IA (OV
 ## Prérequis
 
 - `kubectl` configuré avec le kubeconfig du cluster (`equipe-5.yaml`)
-- Repo GitHub créé (remplacer `ORG/hackathon-gitops` partout)
+- Repo GitHub : https://github.com/bisounours1111/hack
 - Token OVH AI Endpoints + PAT GitHub (scope `repo`)
 
 ## Bootstrap Argo CD
@@ -23,10 +23,9 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ## Déploiement GitOps
 
-1. Remplacer `https://github.com/ORG/hackathon-gitops` par votre repo dans tous les manifests.
-2. Pousser le dépôt sur GitHub (`main`).
-3. Enregistrer le repo dans Argo CD (UI ou CLI).
-4. Appliquer l'App of Apps :
+1. Pousser le dépôt sur GitHub (`main`) : https://github.com/bisounours1111/hack
+2. Enregistrer le repo dans Argo CD (UI ou CLI).
+3. Appliquer l'App of Apps :
 
 ```bash
 kubectl apply -f root-app.yaml

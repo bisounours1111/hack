@@ -28,7 +28,7 @@ TRIVY_VERSION = "v1alpha1"
 TRIVY_PLURAL = "vulnerabilityreports"
 TARGET_NAMESPACE = os.environ.get("TARGET_NAMESPACE", "demo")
 MANIFEST_PATH = os.environ.get("MANIFEST_PATH", "apps/vulnerable-app/deployment.yaml")
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "ORG/hackathon-gitops")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "bisounours1111/hack")
 GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 ACTIONABLE_SEVERITIES = {"CRITICAL", "HIGH"}
 
