@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: remediator
+  namespace: demo
+  labels:
+    app: remediator
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: remediator
+        spec:
+          serviceAccountName: remediator
+          restartPolicy: OnFailure
+          containers:
+            - name: remediator
+              image: python:3.12-slim
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  pip install --quiet -r /app/requirements.txt
+                  python /app/remediator.py
+              env:
+                - name: TARGET_NAMESPACE
+                  value: demo
+                - name: MANIFEST_PATH
+                  value: apps/vulnerable-app/deployment.yaml
+                - name: GITHUB_BRANCH
+                  value: main
+              envFrom:
+                - secretRef:
+                    name: remediator-secrets
+              volumeMounts:
+                - name: app
+                  mountPath: /app
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+          volumes:
+            - name: app
+              configMap:
+                name: remediator-code

@@ -1,0 +1,7 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+equipe-5.yaml
+.DS_Store
